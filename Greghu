@@ -1,0 +1,553 @@
+-- Vetements Script using Direct LinoriaLib Repository UI Layout
+
+local repo = 'https://raw.githubusercontent.com/mstudio45/LinoriaLib/main/'
+
+local Library = loadstring(game:HttpGet(repo .. 'Library.lua'))()
+local ThemeManager = loadstring(game:HttpGet(repo .. 'addons/ThemeManager.lua'))()
+local SaveManager = loadstring(game:HttpGet(repo .. 'addons/SaveManager.lua'))()
+
+local Options = Library.Options
+local Toggles = Library.Toggles
+
+-- Mobile-friendly defaults
+Library.ShowToggleFrameInKeybinds = true
+Library.ShowCustomCursor = false
+Library.NotifySide = "Left"
+
+-- ========== Professional Theme ==========
+Library.AccentColor     = Color3.fromRGB(70, 130, 220)
+Library.MainColor       = Color3.fromRGB(18, 18, 20)
+Library.BackgroundColor = Color3.fromRGB(12, 12, 14)
+Library.OutlineColor    = Color3.fromRGB(32, 32, 36)
+Library.FontColor       = Color3.fromRGB(225, 225, 230)
+Library.RiskColor       = Color3.fromRGB(220, 60, 60)
+
+local Window = Library:CreateWindow({
+    Title = 'Vetements',
+    Center = true,
+    AutoShow = true,
+    Resizable = true,
+    ShowCustomCursor = false,
+    UnlockMouseWhileOpen = true,
+    TabPadding = 8,
+    MenuFadeTime = 0.2,
+    Size = UDim2.fromOffset(540, 380)
+})
+
+-- ==========================================
+-- Tabs
+-- ==========================================
+local Tabs = {
+    Main = Window:AddTab('Main'),
+    ['UI Settings'] = Window:AddTab('UI Settings'),
+}
+
+-- ==========================================
+-- Voidspam Section
+-- ==========================================
+local VoidspamGroup = Tabs.Main:AddLeftGroupbox('Voidspam')
+
+VoidspamGroup:AddToggle('VoidspamEnabled', {
+    Text = 'Enabled',
+    Default = false,
+    Tooltip = 'Enable Voidspam',
+}):AddKeyPicker('VoidspamKey', {
+    Default = 'None',
+    Mode = 'Toggle',
+    SyncToggleState = true,
+    Text = 'Voidspam'
+})
+
+VoidspamGroup:AddDropdown('VoidspamMode', {
+    Values = {
+        'Quantum',
+        'Standard',
+        'Precision',
+        'Aggressive',
+        'Hyper',
+        'Silent',
+        'Custom'
+    },
+    Default = 1,
+    Multi = false,
+    Text = 'Mode'
+})
+
+VoidspamGroup:AddDivider()
+
+-- Range Sliders
+VoidspamGroup:AddSlider('VoidspamZRange', {
+    Text = 'Z Range',
+    Default = 50,
+    Min = 1,
+    Max = 200,
+    Rounding = 0,
+    Compact = false
+})
+
+VoidspamGroup:AddSlider('VoidspamSRange', {
+    Text = 'S Range',
+    Default = 50,
+    Min = 1,
+    Max = 200,
+    Rounding = 0,
+    Compact = false
+})
+
+VoidspamGroup:AddSlider('VoidspamXRange', {
+    Text = 'X Range',
+    Default = 50,
+    Min = 1,
+    Max = 200,
+    Rounding = 0,
+    Compact = false
+})
+
+VoidspamGroup:AddSlider('VoidspamVRange', {
+    Text = 'V Range',
+    Default = 50,
+    Min = 1,
+    Max = 200,
+    Rounding = 0,
+    Compact = false
+})
+
+VoidspamGroup:AddSlider('VoidspamARange', {
+    Text = 'A Range',
+    Default = 50,
+    Min = 1,
+    Max = 200,
+    Rounding = 0,
+    Compact = false
+})
+
+-- ==========================================
+-- Void Evasion & Weapon Enhancements
+-- ==========================================
+local EvasionGroup = Tabs.Main:AddRightGroupbox('Void Evasion')
+
+EvasionGroup:AddToggle('VoidEvasionEnabled', {
+    Text = 'Enabled',
+    Default = false,
+    Tooltip = 'Enable Void Evasion',
+}):AddKeyPicker('VoidEvasionKey', {
+    Default = 'None',
+    Mode = 'Toggle',
+    SyncToggleState = true,
+    Text = 'Void Evasion'
+})
+
+EvasionGroup:AddDropdown('EvasionMode', {
+    Values = {
+        'Quantum',
+        'Adaptive',
+        'Predictive',
+        'Reactive',
+        'Aggressive',
+        'Safe'
+    },
+    Default = 1,
+    Multi = false,
+    Text = 'Evasion Mode'
+})
+
+EvasionGroup:AddSlider('EvasionSpeed', {
+    Text = 'Speed',
+    Default = 50,
+    Min = 1,
+    Max = 100,
+    Rounding = 0,
+    Compact = false
+})
+
+EvasionGroup:AddToggle('EvasionAuto', {
+    Text = 'Auto Evasion',
+    Default = true
+})
+
+EvasionGroup:AddDivider()
+
+-- Additional Combat Toggles
+EvasionGroup:AddToggle('FastMeleeToggle', {
+    Text = 'Fast Melee',
+    Default = false
+})
+
+EvasionGroup:AddToggle('ShotgunBypassToggle', {
+    Text = 'Shotgun Bypass',
+    Default = false
+})
+
+EvasionGroup:AddToggle('UndergroundToggle', {
+    Text = 'Underground (Immunity)',
+    Default = false
+})
+
+-- ==========================================
+-- Services & Feature Logic
+-- ==========================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+
+local lockedY = nil
+local lastPos = nil
+local originalY = nil
+local SPEED_MULTIPLIER = 1.7
+
+-- Shotgun Bypass Variables
+local projConnections = {}
+local projAttached = setmetatable({}, { __mode = "k" })
+local projHeadHistory = {}
+
+local PROJECTILE_SPEED = 150
+local HISTORY_SIZE = 12
+local MAX_LEAD_TIME = 0.45
+local GRAVITY = workspace.Gravity
+local HITBOX_OFFSET = Vector3.new(0, 0.15, 0)
+local SNAP_DIST_THRESHOLD = 0.08
+local LERP_SPEED = 0.72
+local TARGET_FOLDERS = { ["Shotgun"] = true }
+local ORIENTATION_OFFSET = CFrame.new()
+
+local estimatedPing = 0
+task.spawn(function()
+	while true do
+		local s = tick()
+		RunService.Heartbeat:Wait()
+		estimatedPing = math.clamp(tick() - s, 0, 0.25)
+	end
+end)
+
+local function UpdateHeadHistory(head)
+	if not head or not head.Parent then return end
+	local id = tostring(head)
+	if not projHeadHistory[id] then
+		projHeadHistory[id] = { vel = Vector3.zero, acc = Vector3.zero }
+	end
+	local hist = projHeadHistory[id]
+	local now = tick()
+
+	table.insert(hist, { pos = head.Position, t = now })
+	if #hist > HISTORY_SIZE then table.remove(hist, 1) end
+
+	if #hist >= 2 then
+		local a = hist[#hist - 1]
+		local b = hist[#hist]
+		local dt = b.t - a.t
+		if dt > 0 then
+			hist.vel = hist.vel:Lerp((b.pos - a.pos) / dt, 0.6)
+		end
+	end
+
+	if #hist >= 3 then
+		local a = hist[#hist - 2]
+		local b = hist[#hist - 1]
+		local c = hist[#hist]
+		local dt1 = b.t - a.t
+		local dt2 = c.t - b.t
+		if dt1 > 0 and dt2 > 0 then
+			local v1 = (b.pos - a.pos) / dt1
+			local v2 = (c.pos - b.pos) / dt2
+			hist.acc = hist.acc:Lerp((v2 - v1) / ((dt1 + dt2) / 2), 0.35)
+		end
+	end
+end
+
+local function PredictPosition(head, fromPos)
+	if not head or not head.Parent then return nil end
+	local id = tostring(head)
+	local hist = projHeadHistory[id]
+	if not hist or #hist < 2 then return head.Position + HITBOX_OFFSET end
+
+	local dist = (fromPos - head.Position).Magnitude
+	local travelTime = dist / PROJECTILE_SPEED
+	local leadTime = math.clamp(travelTime + estimatedPing, 0, MAX_LEAD_TIME)
+
+	local predicted = head.Position + hist.vel * leadTime + hist.acc * (0.5 * leadTime * leadTime) + HITBOX_OFFSET
+	return predicted - Vector3.new(0, -GRAVITY * 0.5 * travelTime * travelTime, 0)
+end
+
+local function GetBestTarget(fromPos)
+	local bestHead, bestScore = nil, math.huge
+	for _, plr in pairs(Players:GetPlayers()) do
+		if plr ~= LocalPlayer then
+			local char = plr.Character
+			local head = char and char:FindFirstChild("Head")
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if head and hum and hum.Health > 0 then
+				local dist = (fromPos - head.Position).Magnitude
+				local hist = projHeadHistory[tostring(head)]
+				local score = dist + (hist and hist.vel.Magnitude or 0) * 0.4
+				if score < bestScore then
+					bestScore = score
+					bestHead = head
+				end
+			end
+		end
+	end
+	return bestHead
+end
+
+local function AttachPartToClosestHead(part)
+	if not part or not part:IsA("BasePart") or projAttached[part] then return end
+	projAttached[part] = true
+	part.CanCollide = false
+	part.Massless = true
+
+	task.spawn(function()
+		local smoothPos = part.Position
+		while part and part.Parent and Toggles.ShotgunBypassToggle and Toggles.ShotgunBypassToggle.Value do
+			local head = GetBestTarget(part.Position)
+			if head and head.Parent then
+				UpdateHeadHistory(head)
+				local predicted = PredictPosition(head, part.Position)
+				if predicted then
+					smoothPos = ((smoothPos - predicted).Magnitude < SNAP_DIST_THRESHOLD) and predicted or smoothPos:Lerp(predicted, LERP_SPEED)
+					part.AssemblyAngularVelocity = Vector3.zero
+					part.AssemblyLinearVelocity = Vector3.zero
+					part.CFrame = CFrame.new(smoothPos) * ORIENTATION_OFFSET
+				end
+			end
+			RunService.Heartbeat:Wait()
+		end
+	end)
+end
+
+local function HandleInstance(inst)
+	if not (Toggles.ShotgunBypassToggle and Toggles.ShotgunBypassToggle.Value) or not inst or not inst.Parent then return end
+	if inst:IsA("BasePart") then
+		AttachPartToClosestHead(inst)
+	elseif inst:IsA("Model") or inst:IsA("Folder") then
+		for _, d in ipairs(inst:GetDescendants()) do
+			if d:IsA("BasePart") then AttachPartToClosestHead(d) end
+		end
+	end
+end
+
+local function HookFolder(folder)
+	for _, d in ipairs(folder:GetDescendants()) do HandleInstance(d) end
+	table.insert(projConnections, folder.DescendantAdded:Connect(HandleInstance))
+end
+
+Toggles.ShotgunBypassToggle:OnChanged(function(Value)
+	for _, conn in ipairs(projConnections) do pcall(function() conn:Disconnect() end) end
+	table.clear(projConnections)
+	table.clear(projAttached)
+	table.clear(projHeadHistory)
+
+	if Value then
+		table.insert(projConnections, RunService.Heartbeat:Connect(function()
+			for _, plr in pairs(Players:GetPlayers()) do
+				if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") then
+					UpdateHeadHistory(plr.Character.Head)
+				end
+			end
+		end))
+		for _, child in ipairs(workspace:GetChildren()) do
+			if TARGET_FOLDERS[child.Name] then HookFolder(child) end
+		end
+		table.insert(projConnections, workspace.ChildAdded:Connect(function(child)
+			if TARGET_FOLDERS[child.Name] then HookFolder(child) end
+		end))
+	end
+end)
+
+-- Main Heartbeat Engine
+local originalMeleeValues = {}
+RunService.Heartbeat:Connect(function(deltaTime)
+	-- Fast Melee Mod
+	pcall(function()
+		if game.GameId == 6035872082 then
+			local ItemLib = ReplicatedStorage:FindFirstChild("Modules") and ReplicatedStorage.Modules:FindFirstChild("ItemLibrary")
+			if ItemLib then
+				local Items = require(ItemLib).Items
+				local meleeActive = Toggles.FastMeleeToggle and Toggles.FastMeleeToggle.Value
+				for _, data in pairs(Items) do
+					if typeof(data) == "table" then
+						if meleeActive then
+							if not originalMeleeValues[data] then
+								originalMeleeValues[data] = {
+									Attack = data.AttackCooldown,
+									Swing = data.SwingCooldown,
+									Melee = data.MeleeCooldown,
+									Cooldown = data.Cooldown,
+									Recovery = data.RecoveryTime,
+									Reset = data.ResetTime,
+									Speed = data.SwingSpeed or 1,
+								}
+							end
+							data.AttackCooldown = 0; data.SwingCooldown = 0; data.MeleeCooldown = 0
+							data.Cooldown = 0; data.RecoveryTime = 0; data.ResetTime = 0
+							data.SwingSpeed = (originalMeleeValues[data].Speed or 1) * 2
+						else
+							if originalMeleeValues[data] then
+								local orig = originalMeleeValues[data]
+								data.AttackCooldown = orig.Attack; data.SwingCooldown = orig.Swing
+								data.MeleeCooldown = orig.Melee; data.Cooldown = orig.Cooldown
+								data.RecoveryTime = orig.Recovery; data.ResetTime = orig.Reset
+								data.SwingSpeed = orig.Speed
+							end
+						end
+					end
+				end
+				if not meleeActive then originalMeleeValues = {} end
+			end
+		end
+	end)
+
+	-- Underground Immunity Logic
+	if Toggles.UndergroundToggle and Toggles.UndergroundToggle.Value then
+		pcall(function()
+			local character = LocalPlayer.Character
+			if not (character and character.PrimaryPart) then return end
+			local root = character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			if root and humanoid and humanoid.Health > 0 then
+				humanoid.Health = humanoid.MaxHealth
+				for _, part in ipairs(character:GetChildren()) do
+					if part:IsA("BasePart") then
+						part.CanTouch = false
+						part.AssemblyLinearVelocity = Vector3.zero
+						part.AssemblyAngularVelocity = Vector3.zero
+					end
+				end
+
+				local currentPos = root.Position
+				local depthOffset = -6
+				
+				if not lockedY then
+					if not originalY then originalY = currentPos.Y end
+					lockedY = currentPos.Y + depthOffset
+				else
+					lockedY = (originalY or currentPos.Y) + depthOffset
+				end
+				
+				local moveDir = humanoid.MoveDirection
+				if moveDir.Magnitude > 0 then
+					lastPos = currentPos + (moveDir * (humanoid.WalkSpeed * SPEED_MULTIPLIER) * deltaTime)
+				else
+					if not lastPos then lastPos = currentPos end
+				end
+				
+				root.CFrame = CFrame.new(lastPos.X, lockedY, lastPos.Z) * (root.CFrame - currentPos)
+			end
+		end)
+	else
+		if lockedY then
+			lockedY = nil; lastPos = nil; originalY = nil
+			pcall(function()
+				if LocalPlayer.Character then
+					for _, part in ipairs(LocalPlayer.Character:GetChildren()) do
+						if part:IsA("BasePart") then part.CanTouch = true end
+					end
+				end
+			end)
+		end
+	end
+end)
+
+-- Watermark
+Library:SetWatermarkVisibility(true)
+
+local FrameTimer = tick()
+local FrameCounter = 0
+local FPS = 60
+
+local WatermarkConnection = game:GetService('RunService').RenderStepped:Connect(function()
+    FrameCounter += 1
+
+    if (tick() - FrameTimer) >= 1 then
+        FPS = FrameCounter
+        FrameTimer = tick()
+        FrameCounter = 0
+    end
+
+    local ping = 0
+    pcall(function()
+        ping = math.floor(game:GetService('Stats').Network.ServerStatsItem['Data Ping']:GetValue())
+    end)
+
+    Library:SetWatermark(('Vetements | %s fps | %s ms'):format(
+        math.floor(FPS),
+        ping
+    ))
+end)
+
+Library.KeybindFrame.Visible = true
+
+Library:OnUnload(function()
+    WatermarkConnection:Disconnect()
+    print('Unloaded!')
+    Library.Unloaded = true
+end)
+
+-- UI Settings
+local MenuGroup = Tabs['UI Settings']:AddLeftGroupbox('Menu')
+
+MenuGroup:AddToggle('KeybindMenuOpen', {
+    Text = 'Show Keybind Menu',
+    Default = Library.KeybindFrame.Visible,
+    Tooltip = 'Toggle the keybind list visibility',
+    Callback = function(Value)
+        Library.KeybindFrame.Visible = Value
+    end
+})
+
+MenuGroup:AddButton('Unload', function()
+    Library:Unload()
+end)
+
+MenuGroup:AddLabel('Menu bind'):AddKeyPicker('MenuKeybind', {
+    Default = 'RightControl',
+    NoUI = true,
+    Text = 'Menu keybind'
+})
+
+Library.ToggleKeybind = Options.MenuKeybind
+
+-- Apply theme
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
+
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({ 'MenuKeybind' })
+
+ThemeManager:SetFolder('VetementsLua')
+SaveManager:SetFolder('VetementsLua/specific-game')
+
+SaveManager:BuildConfigSection(Tabs['UI Settings'])
+ThemeManager:ApplyToTab(Tabs['UI Settings'])
+
+-- Force professional colors
+Library.AccentColor     = Color3.fromRGB(70, 130, 220)
+Library.MainColor       = Color3.fromRGB(18, 18, 20)
+Library.BackgroundColor = Color3.fromRGB(12, 12, 14)
+Library.OutlineColor    = Color3.fromRGB(32, 32, 36)
+Library.FontColor       = Color3.fromRGB(225, 225, 230)
+
+Library:UpdateColorsUsingRegistry()
+
+-- Force everything square
+local function MakeEverythingSquare(parent)
+    if not parent then return end
+    for _, obj in ipairs(parent:GetDescendants()) do
+        if obj:IsA("UICorner") then
+            obj.CornerRadius = UDim.new(0, 0)
+        end
+    end
+end
+
+task.defer(function()
+    task.wait(0.1)
+    if Library.ScreenGui then
+        MakeEverythingSquare(Library.ScreenGui)
+    end
+    if Library.KeybindFrame then
+        MakeEverythingSquare(Library.KeybindFrame)
+    end
+end)
+
+SaveManager:LoadAutoloadConfig()
